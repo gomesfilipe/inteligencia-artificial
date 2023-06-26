@@ -223,7 +223,7 @@ class DecisionTreeKeyClassifier(KeyClassifier):
 
     def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType):
         limDist = speed * self.alpha # Distância limite é diretamente proporcional a velocidade do jogo
-
+        # print(distance)
         # if distance <= limDist:               # Tomar uma decisão
         #     if isinstance(obType, Bird):      # É pássaro
         #         if obHeight > self.limHeight: # Pássaro está no alto, abaixar
@@ -235,7 +235,7 @@ class DecisionTreeKeyClassifier(KeyClassifier):
         # else:                                 # Está longe do obstáculo, abaixar
         #     return "K_DOWN"
 
-        if distance <= limDist:               # Tomar uma decisão
+        if distance <= limDist and distance >= 30: # Tomar uma decisão // ver como fazer esse parâmetro ser ajustável 
             if isinstance(obType, Bird):      # É pássaro
                 if obHeight < 40:             # Pássaro está no chão, pular
                     return "K_UP"
