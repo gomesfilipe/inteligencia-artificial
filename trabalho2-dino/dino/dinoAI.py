@@ -474,12 +474,16 @@ def main():
     # best_state, best_value = gradient_ascent(initial_state, 5000)
     # aiPlayer = KeySimplestClassifier(best_state)
 
-    bestState, bestValue = PSO(100000)
+    bestState, bestValue = PSO(100)
 
     aiPlayer = DecisionTreeKeyClassifier(bestState)
     res, value = manyPlaysResults(30)
     npRes = np.asarray(res)
-    print(res, npRes.mean(), npRes.std(), value)
+    print('results:')
+    print(res)
 
+    print('\nmean: {:.2f}'.format(npRes.mean()))
+    print('std: {:.2f}'.format(npRes.std()))
+    print('value: {:.2f}'.format(value))
 
 main()
