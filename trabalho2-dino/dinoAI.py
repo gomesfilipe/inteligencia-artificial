@@ -234,27 +234,27 @@ class DecisionTreeKeyClassifier(KeyClassifier):
     def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType):
         limDistUp = speed * self.alpha # Distância para pular é diretamente proporcional a velocidade do jogo
         limDistDown = speed * self.beta # Distância para abaixar durante o pulo é diretamente proporcional a velocidade do jogo
-        limDistKeepUp = limDistUp * self.gamma
+        limDistKeepUp = speed * self.gamma
 
-        if speed <= 37:
-            if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
-                if self.__shouldUp(obType, obHeight):
-                    return "K_UP"
-                else:
-                    return "K_DOWN"
-                
-            # elif distance < limDistDown and nextObDistance <= limDistKeepUp and self.__shouldUp(nextObHeight, nextObType) and speed > 37: # Passou o obstáculo e provavelmente ainda está no ar
-            #     return "K_UP"
-            else:                                 # Está longe do obstáculo, abaixar
+        # if speed <= 37:
+        if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
+            if self.__shouldUp(obType, obHeight):
+                return "K_UP"
+            else:
                 return "K_DOWN"
-        else:
-            if nextObDistance < limDistDown and nextObDistance >= limDistDown: # Passou o obstáculo e provavelmente ainda está no ar
-                if self.__shouldUp(obType, obHeight):
-                    return "K_UP"
-                else:
-                    return "K_DOWN"
-            else:                                 # Está longe do obstáculo, abaixar
-                return "K_DOWN"
+            
+        # elif distance < limDistDown and nextObDistance <= limDistKeepUp and self.__shouldUp(nextObHeight, nextObType) and speed > 37: # Passou o obstáculo e provavelmente ainda está no ar
+        #     return "K_UP"
+        else:                                 # Está longe do obstáculo, abaixar
+            return "K_DOWN"
+        # else:
+        #     if nextObDistance < limDistDown and nextObDistance >= limDistDown: # Passou o obstáculo e provavelmente ainda está no ar
+        #         if self.__shouldUp(obType, obHeight):
+        #             return "K_UP"
+        #         else:
+        #             return "K_DOWN"
+        #     else:                                 # Está longe do obstáculo, abaixar
+        #         return "K_DOWN"
         
         # if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
         #     if isinstance(obType, Bird):      # É pássaro
@@ -400,8 +400,8 @@ def playGame():
 
 def PSO(maxIter):
     sizePopulation = 20 # Tamanho da população 10 vezes maior que o número de dimensões do classificador 
-    population = [[random.uniform(20, 30), random.uniform(0, 15), random.uniform(0.8, 2)] for i in range(sizePopulation)]
-    velocities = [[random.uniform(0, 5), random.uniform(0, 1), random.uniform(0, 0.5)] for i in range(sizePopulation)]
+    population = [[random.uniform(20, 30), random.uniform(0, 15), random.uniform(50, 100)] for i in range(sizePopulation)]
+    velocities = [[random.uniform(0, 5), random.uniform(0, 1), random.uniform(0, 20)] for i in range(sizePopulation)]
 
     bestLocals = []
     maxLocalValues = []
@@ -445,14 +445,18 @@ def PSO(maxIter):
 
     return bestGlobal, maxGlobalValue
 
+
 def sum2Particles(a, b):
     return [a[i] + b[i] for i in range(len(a))]
 
+
 def sum3Particles(a, b, c):
     return [a[i] + b[i] + c[i] for i in range(len(a))]
-    
+
+
 def subParticles(a, b):
     return [a[i] - b[i] for i in range(len(a))]
+
 
 def multParticle(a, constant):
     return [constant * i for i in a]
@@ -460,6 +464,7 @@ def multParticle(a, constant):
 
 def nextPosition(x, v):
     return [sum2Particles(p1, p2) for (p1, p2) in zip(x, v)]
+
 
 def nextVelocity(x, v, bestLocals, bestGlobal):
     c1 = 0.5
@@ -489,13 +494,7 @@ def manyPlaysResults(rounds):
 
 def main():
     global aiPlayer
-    # initialState = []
-    # initial_state = [(15, 250), (18, 350), (20, 450), (1000, 550)]
-    # aiPlayer = KeySimplestClassifier(initial_state)
-    # best_state, best_value = gradient_ascent(initial_state, 5000)
-    # aiPlayer = KeySimplestClassifier(best_state)
-
-    bestState, bestValue = PSO(500)
+    bestState, bestValue = PSO(1000)
 
     aiPlayer = DecisionTreeKeyClassifier(bestState)
     res, value = manyPlaysResults(30)

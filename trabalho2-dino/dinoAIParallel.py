@@ -218,26 +218,58 @@ class KeyClassifier:
         pass
 
 
-def first(x):
-    return x[0]
-
-
-class KeySimplestClassifier(KeyClassifier):
+class DecisionTreeKeyClassifier(KeyClassifier):
     def __init__(self, state):
-        self.state = state
+        self.alpha = state[0]
+        self.beta = state[1]
+        self.gamma = state[2]
+
+    def __isGroundBird(self, obType, obHeight):
+        if isinstance(obType, Bird) and obHeight < 40:
+            return True
+        return False
+    
+    def __shouldUp(self, obType, obHeight):
+        if isinstance(obType, SmallCactus) or isinstance(obType, LargeCactus) or self.__isGroundBird(obType, obHeight):
+            return True
+        return False
 
     def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType):
-        self.state = sorted(self.state, key=first)
-        for s, d in self.state:
-            if speed < s:
-                limDist = d
-                break
-        if distance <= limDist:
-            if isinstance(obType, Bird) and obHeight > 50:
-                return "K_DOWN"
-            else:
+        limDistUp = speed * self.alpha # Distância para pular é diretamente proporcional a velocidade do jogo
+        limDistDown = speed * self.beta # Distância para abaixar durante o pulo é diretamente proporcional a velocidade do jogo
+        limDistKeepUp = speed * self.gamma
+
+        # if speed <= 37:
+        if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
+            if self.__shouldUp(obType, obHeight):
                 return "K_UP"
-        return "K_NO"
+            else:
+                return "K_DOWN"
+            
+        elif distance < limDistDown and nextObDistance <= limDistKeepUp and self.__shouldUp(nextObHeight, nextObType) and speed > 37: # Passou o obstáculo e provavelmente ainda está no ar
+            return "K_UP"
+        else:                                 # Está longe do obstáculo, abaixar
+            return "K_DOWN"
+        # else:
+        #     if nextObDistance < limDistDown and nextObDistance >= limDistDown: # Passou o obstáculo e provavelmente ainda está no ar
+        #         if self.__shouldUp(obType, obHeight):
+        #             return "K_UP"
+        #         else:
+        #             return "K_DOWN"
+        #     else:                                 # Está longe do obstáculo, abaixar
+        #         return "K_DOWN"
+        
+        # if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
+        #     if isinstance(obType, Bird):      # É pássaro
+        #         if obHeight < 40:             # Pássaro está no chão, pular
+        #             return "K_UP"
+        #         else:                         # Pássaro está no baixo, pular
+        #             return "K_DOWN"
+        #     else:                             # É um cacto, pular
+        #         return "K_UP"
+        # else:                                 # Está longe do obstáculo, abaixar
+        #     return "K_DOWN"
+
 
     def updateState(self, state):
         self.state = state
@@ -278,7 +310,7 @@ def playGame(solutions):
 
     for solution in solutions:
         players.append(Dinosaur())
-        players_classifier.append(KeySimplestClassifier(solution))
+        players_classifier.append(DecisionTreeKeyClassifier(solution))
         solution_fitness.append(0)
         died.append(False)
 
@@ -304,6 +336,7 @@ def playGame(solutions):
             SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
             x_pos_bg = 0
         x_pos_bg -= game_speed
+
 
     def statistics():
         text_1 = font.render(f'Dinosaurs Alive:  {str(died.count(False))}', True, (0, 0, 0))
@@ -384,64 +417,83 @@ def playGame(solutions):
 
     return solution_fitness
 
+def PSO(maxIter):
+    sizePopulation = 50 # Tamanho da população 10 vezes maior que o número de dimensões do classificador 
+    population = [[random.uniform(20, 30), random.uniform(0, 15), random.uniform(10, 30)] for i in range(sizePopulation)]
+    velocities = [[random.uniform(0, 5), random.uniform(0, 1), random.uniform(0, 20)] for i in range(sizePopulation)]
 
-# Change State Operator
-def change_state(state, position, vs, vd):
-    aux = state.copy()
-    s, d = state[position]
-    ns = s + vs
-    nd = d + vd
-    if ns < 15 or nd > 1000:
-        return []
-    return aux[:position] + [(ns, nd)] + aux[position + 1:]
+    # population = [[random.uniform(0, 100), random.uniform(0, 100), random.uniform(0, 100)] for i in range(sizePopulation)]
+    # velocities = [[random.uniform(0, 100), random.uniform(0, 100), random.uniform(0, 100)] for i in range(sizePopulation)]
+
+    bestLocals = population
+    maxLocalValues = sizePopulation * [0]
+   
+    bestGlobal = population[0]
+    maxGlobalValue = 0
+
+    for i in range(maxIter):
+        if i % 100 == 0:
+            print(f'População {i} maxGlobal {maxGlobalValue}')
+
+        
+        values = manyPlaysResultsTrain(3, population)
+        
+        for index, particle in enumerate(population):
+            if values[index] > maxLocalValues[index]:
+                bestLocals[index] = particle
+                maxLocalValues[index] = values[index]
+
+            # Checando se é a melhor posição encontrada por todo o enxame de partículas
+            if values[index] > maxGlobalValue:
+                bestGlobal = particle
+                maxGlobalValue = values[index]
+
+        # Atualizando posições e velocidades das partículas
+        oldVelocities = velocities
+        oldPopulation = population
+        population = nextPosition(oldPopulation, oldVelocities)
+        velocities = nextVelocity(oldPopulation, oldVelocities, bestLocals, bestGlobal)
+
+    return bestGlobal, maxGlobalValue
 
 
-# Neighborhood
-def generate_neighborhood(state):
-    neighborhood = []
-    state_size = len(state)
-    for i in range(state_size):
-        ds = random.randint(1, 10)
-        dd = random.randint(1, 100)
-        new_states = [change_state(state, i, ds, 0), change_state(state, i, (-ds), 0), change_state(state, i, 0, dd),
-                      change_state(state, i, 0, (-dd))]
-        for s in new_states:
-            if s != []:
-                neighborhood.append(s)
-    return neighborhood
+def sum2Particles(a, b):
+    return [a[i] + b[i] for i in range(len(a))]
 
 
-# Gradiente Ascent
-def gradient_ascent(state, max_time):
-    start = time.process_time()
-    res, max_value = manyPlaysResultsTest(3, state)
-    better = True
-    end = 0
-    while better and end - start <= max_time:
-        neighborhood = generate_neighborhood(state)
-        better = False
+def sum3Particles(a, b, c):
+    return [a[i] + b[i] + c[i] for i in range(len(a))]
 
-        results = playGame(neighborhood)
-        for i,value in enumerate(results):
-            if value > max_value:
-                state = neighborhood[i]
-                max_value = value
-                better = True
-        '''
-        for s in neighborhood:
-            aiPlayer = KeySimplestClassifier(s)
-            res, value = manyPlaysResults(3)
-            if value > max_value:
-                state = s
-                max_value = value
-                better = True
-        '''
-        end = time.process_time()
-    return state, max_value
+
+def subParticles(a, b):
+    return [a[i] - b[i] for i in range(len(a))]
+
+
+def multParticle(a, constant):
+    return [constant * i for i in a]
+
+
+def nextPosition(x, v):
+    return [sum2Particles(p1, p2) for (p1, p2) in zip(x, v)]
+
+
+def nextVelocity(x, v, bestLocals, bestGlobal):
+    c1 = 2
+    c2 = 0.5
+    w  = 0.8
+    r1 = random.uniform(0, 1)
+    r2 = random.uniform(0, 1)
+    
+    t1 = [multParticle(p, w) for p in v]
+    t2 = [multParticle(subParticles(p1, p2), c1 * r1) for (p1, p2) in zip(bestLocals, x)]
+    t3 = [multParticle(subParticles(p, bestGlobal), c2 * r2) for p in x]
+
+    return [sum3Particles(p1, p2, p3) for (p1, p2, p3) in zip(t1, t2, t3)]
 
 
 from scipy import stats
 import numpy as np
+
 
 def manyPlaysResultsTrain(rounds,solutions):
     results = []
@@ -465,12 +517,21 @@ def manyPlaysResultsTest(rounds,best_solution):
 
 
 def main():
+    global aiPlayer
+    bestState, bestValue = PSO(1000)
 
-    initial_state = [(15, 250), (18, 350), (20, 450), (1000, 550)]
-    best_state, best_value = gradient_ascent(initial_state, 5000)
-    res, value = manyPlaysResultsTest(30, best_state)
+    aiPlayer = DecisionTreeKeyClassifier(bestState)
+    res, value = manyPlaysResultsTest(30, bestState)
     npRes = np.asarray(res)
-    print(res, npRes.mean(), npRes.std(), value)
+    print('results:')
+    print(res)
+    
+    print('\nbestState:')
+    print(bestState)
+
+    print('\nmean: {:.2f}'.format(npRes.mean()))
+    print('std: {:.2f}'.format(npRes.std()))
+    print('value: {:.2f}'.format(value))
 
 
 main()
