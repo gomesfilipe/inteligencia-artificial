@@ -218,33 +218,54 @@ class KeyClassifier:
 class DecisionTreeKeyClassifier(KeyClassifier):
     def __init__(self, state):
         self.alpha = state[0]
-        # self.limHeight = state[1]
+        self.beta = state[1]
+        self.gamma = state[2]
 
+    def __isGroundBird(self, obType, obHeight):
+        if isinstance(obType, Bird) and obHeight < 40:
+            return True
+        return False
+    
+    def __shouldUp(self, obType, obHeight):
+        if isinstance(obType, SmallCactus) or isinstance(obType, LargeCactus) or self.__isGroundBird(obType, obHeight):
+            return True
+        return False
 
     def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType):
-        limDist = speed * self.alpha # Distância limite é diretamente proporcional a velocidade do jogo
-        # print(distance)
-        # if distance <= limDist:               # Tomar uma decisão
+        limDistUp = speed * self.alpha # Distância para pular é diretamente proporcional a velocidade do jogo
+        limDistDown = speed * self.beta # Distância para abaixar durante o pulo é diretamente proporcional a velocidade do jogo
+        limDistKeepUp = limDistUp * self.gamma
+
+        if speed <= 37:
+            if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
+                if self.__shouldUp(obType, obHeight):
+                    return "K_UP"
+                else:
+                    return "K_DOWN"
+                
+            # elif distance < limDistDown and nextObDistance <= limDistKeepUp and self.__shouldUp(nextObHeight, nextObType) and speed > 37: # Passou o obstáculo e provavelmente ainda está no ar
+            #     return "K_UP"
+            else:                                 # Está longe do obstáculo, abaixar
+                return "K_DOWN"
+        else:
+            if nextObDistance < limDistDown and nextObDistance >= limDistDown: # Passou o obstáculo e provavelmente ainda está no ar
+                if self.__shouldUp(obType, obHeight):
+                    return "K_UP"
+                else:
+                    return "K_DOWN"
+            else:                                 # Está longe do obstáculo, abaixar
+                return "K_DOWN"
+        
+        # if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
         #     if isinstance(obType, Bird):      # É pássaro
-        #         if obHeight > self.limHeight: # Pássaro está no alto, abaixar
-        #             return "K_DOWN"
-        #         else:                         # Pássaro está no baixo, pular
+        #         if obHeight < 40:             # Pássaro está no chão, pular
         #             return "K_UP"
+        #         else:                         # Pássaro está no baixo, pular
+        #             return "K_DOWN"
         #     else:                             # É um cacto, pular
         #         return "K_UP"
         # else:                                 # Está longe do obstáculo, abaixar
         #     return "K_DOWN"
-
-        if distance <= limDist and distance >= 30: # Tomar uma decisão // ver como fazer esse parâmetro ser ajustável 
-            if isinstance(obType, Bird):      # É pássaro
-                if obHeight < 40:             # Pássaro está no chão, pular
-                    return "K_UP"
-                else:                         # Pássaro está no baixo, pular
-                    return "K_DOWN"
-            else:                             # É um cacto, pular
-                return "K_UP"
-        else:                                 # Está longe do obstáculo, abaixar
-            return "K_DOWN"
 
 
     def updateState(self, state):
@@ -378,9 +399,9 @@ def playGame():
 
 
 def PSO(maxIter):
-    sizePopulation = 2 # Tamanho da população 10 vezes maior que o número de dimensões do classificador 
-    population = [[random.uniform(20, 30)] for i in range(sizePopulation)]
-    velocities = [[random.uniform(0, 5)] for i in range(sizePopulation)]
+    sizePopulation = 20 # Tamanho da população 10 vezes maior que o número de dimensões do classificador 
+    population = [[random.uniform(20, 30), random.uniform(0, 15), random.uniform(0.8, 2)] for i in range(sizePopulation)]
+    velocities = [[random.uniform(0, 5), random.uniform(0, 1), random.uniform(0, 0.5)] for i in range(sizePopulation)]
 
     bestLocals = []
     maxLocalValues = []
@@ -389,7 +410,7 @@ def PSO(maxIter):
     maxGlobalValue = 0
 
     for i in range(maxIter):
-        if i % 1000 == 0:
+        if i % 100 == 0:
             print(f'População {i}')
         for index, particle in enumerate(population):
             global aiPlayer
@@ -441,8 +462,8 @@ def nextPosition(x, v):
     return [sum2Particles(p1, p2) for (p1, p2) in zip(x, v)]
 
 def nextVelocity(x, v, bestLocals, bestGlobal):
-    c1 = 1
-    c2 = 2
+    c1 = 0.5
+    c2 = 1
     w  = 0.8
     r1 = random.uniform(0, 1)
     r2 = random.uniform(0, 1)
@@ -474,13 +495,16 @@ def main():
     # best_state, best_value = gradient_ascent(initial_state, 5000)
     # aiPlayer = KeySimplestClassifier(best_state)
 
-    bestState, bestValue = PSO(100)
+    bestState, bestValue = PSO(500)
 
     aiPlayer = DecisionTreeKeyClassifier(bestState)
     res, value = manyPlaysResults(30)
     npRes = np.asarray(res)
     print('results:')
     print(res)
+    
+    print('\nbestState:')
+    print(bestState)
 
     print('\nmean: {:.2f}'.format(npRes.mean()))
     print('std: {:.2f}'.format(npRes.std()))
