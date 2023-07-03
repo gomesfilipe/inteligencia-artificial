@@ -8,7 +8,7 @@ pygame.init()
 
 # Valid values: HUMAN_MODE or AI_MODE
 GAME_MODE = "AI_MODE"
-RENDER_GAME = True
+RENDER_GAME = False
 
 # Global Constants
 SCREEN_HEIGHT = 600
@@ -211,7 +211,7 @@ class KeyClassifier:
     def __init__(self, state):
         pass
 
-    def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight, nextObType):
+    def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight, nextObType, distanceGround):
         pass
 
     def updateState(self, state):
@@ -222,7 +222,7 @@ class DecisionTreeKeyClassifier(KeyClassifier):
     def __init__(self, state):
         self.alpha = state[0]
         self.beta = state[1]
-        self.gamma = state[2]
+        # self.gamma = state[2]
 
     def __isGroundBird(self, obType, obHeight):
         if isinstance(obType, Bird) and obHeight < 40:
@@ -234,41 +234,25 @@ class DecisionTreeKeyClassifier(KeyClassifier):
             return True
         return False
 
-    def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType):
+    def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType, distanceGround):
         limDistUp = speed * self.alpha # Distância para pular é diretamente proporcional a velocidade do jogo
         limDistDown = speed * self.beta # Distância para abaixar durante o pulo é diretamente proporcional a velocidade do jogo
-        limDistKeepUp = speed * self.gamma
-
-        # if speed <= 37:
+        # limDistKeepUp = self.gamma / (speed * speed)
+        # print((nextObDistance, limDistUp))
+        # if nextObDistance <= limDistUp:
+        #     # print('x', end='')
+        #     return "K_UP"
+        
         if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
             if self.__shouldUp(obType, obHeight):
                 return "K_UP"
             else:
                 return "K_DOWN"
-            
-        elif distance < limDistDown and nextObDistance <= limDistKeepUp and self.__shouldUp(nextObHeight, nextObType) and speed > 37: # Passou o obstáculo e provavelmente ainda está no ar
-            return "K_UP"
-        else:                                 # Está longe do obstáculo, abaixar
+        # elif distance < limDistDown and nextObDistance < limDistUp and self.__shouldUp(nextObType, nextObHeight):                                 # Está longe do obstáculo, abaixar
+        #     # print('entrou')
+        #     return "K_UP"
+        else:
             return "K_DOWN"
-        # else:
-        #     if nextObDistance < limDistDown and nextObDistance >= limDistDown: # Passou o obstáculo e provavelmente ainda está no ar
-        #         if self.__shouldUp(obType, obHeight):
-        #             return "K_UP"
-        #         else:
-        #             return "K_DOWN"
-        #     else:                                 # Está longe do obstáculo, abaixar
-        #         return "K_DOWN"
-        
-        # if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
-        #     if isinstance(obType, Bird):      # É pássaro
-        #         if obHeight < 40:             # Pássaro está no chão, pular
-        #             return "K_UP"
-        #         else:                         # Pássaro está no baixo, pular
-        #             return "K_DOWN"
-        #     else:                             # É um cacto, pular
-        #         return "K_UP"
-        # else:                                 # Está longe do obstáculo, abaixar
-        #     return "K_DOWN"
 
 
     def updateState(self, state):
@@ -374,7 +358,9 @@ def playGame(solutions):
                     nextObHeight = obstacles[1].getHeight()
                     nextObType = obstacles[1]
 
-                userInput = players_classifier[i].keySelector(distance, obHeight, game_speed, obType, nextObDistance, nextObHeight,nextObType)
+                xDino, yDino = players[i].getXY()
+                groundDistance = 355 - yDino
+                userInput = players_classifier[i].keySelector(distance, obHeight, game_speed, obType, nextObDistance, nextObHeight, nextObType, groundDistance)
 
                 player.update(userInput)
 
@@ -417,13 +403,95 @@ def playGame(solutions):
 
     return solution_fitness
 
-def PSO(maxIter):
-    sizePopulation = 50 # Tamanho da população 10 vezes maior que o número de dimensões do classificador 
-    population = [[random.uniform(20, 30), random.uniform(0, 15), random.uniform(10, 30)] for i in range(sizePopulation)]
-    velocities = [[random.uniform(0, 5), random.uniform(0, 1), random.uniform(0, 20)] for i in range(sizePopulation)]
+class Particle:
+    w = 1
+    c1 = 1.2
+    c2 = 1.2
 
-    # population = [[random.uniform(0, 100), random.uniform(0, 100), random.uniform(0, 100)] for i in range(sizePopulation)]
-    # velocities = [[random.uniform(0, 100), random.uniform(0, 100), random.uniform(0, 100)] for i in range(sizePopulation)]
+    def __init__(self):
+        self.__alpha = random.uniform(20, 30)
+        self.__beta = random.uniform(0, 15)
+        self.__position = [self.__alpha, self.__beta]
+        self.__velocity = [random.uniform(0, 5), random.uniform(0, 1)]
+        self.__bestLocal = self.__position
+        self.__bestLocalValue = 0
+    
+    def updateVelocity(self, bestGlobal):
+        r1 = random.uniform(0, 1)
+        r2 = random.uniform(0, 1)
+
+        for i in range(len(self.__velocity)):
+            self.__velocity[i] = Particle.w * self.__velocity[i] + Particle.c1 * r1 * abs(self.__bestLocal[i] - self.__position[i]) + Particle.c2 * r2 * abs(bestGlobal[i] - self.__position[i])
+    
+    def updatePosition(self):
+        for i in range(len(self.__position)):
+            self.__position[i] += self.__velocity[i]
+
+    def updateBestLocal(self, position, value):
+        if value > self.__bestLocalValue:
+            self.__bestLocalValue = value
+            self.__bestLocal = position
+    
+    def getPosition(self):
+        return self.__position
+
+    def getBestLocal(self):
+        return self.__bestLocal
+    
+    def getBestLocalValue(self):
+        return self.__bestLocalValue
+
+class Swarm:
+    def __init__(self, populationSize):
+        self.__population = [Particle() for x in range(populationSize)]
+        self.__bestGlobal = [0] * populationSize
+        self.__bestGlobalValue = 0
+
+    def updateBestGlobal(self, position, value):
+        if value > self.__bestGlobalValue:
+            self.__bestGlobalValue = value
+            self.__bestGlobal = position
+
+    def updateSwarm(self, positions, values):
+        for i in range(len(self.__population)):
+            self.__population[i].updateVelocity(self.__bestGlobal)
+            self.__population[i].updatePosition()
+            self.__population[i].updateBestLocal(positions[i], values[i])
+            self.updateBestGlobal(positions[i], values[i])
+    
+    def getPopulation(self):
+        return [particle.getPosition() for particle in self.__population]
+    
+    def getBestGlobal(self):
+        return self.__bestGlobal
+
+    def getBestGlobalValue(self):
+        return self.__bestGlobalValue
+    
+class PSO:
+    def __init__(self, iterations, populationSize):
+        self.__swarm = Swarm(populationSize)
+        self.__iterations = iterations
+
+    def execute(self):
+        for i in range(self.__iterations):
+            population = self.__swarm.getPopulation()
+            values = manyPlaysResultsTrain(3, population)
+            print('values fora: ', end='')
+            print(values)
+            # print(population)
+            print()
+            self.__swarm.updateSwarm(population, values)
+            # print(self.__swarm.getPopulation())
+            # print(self.__swarm.getBestGlobalValue())
+        
+        return self.__swarm.getBestGlobal(), self.__swarm.getBestGlobalValue()
+
+
+def PSO2(maxIter):
+    sizePopulation = 50 # Tamanho da população 10 vezes maior que o número de dimensões do classificador 
+    population = [[random.uniform(20, 30), random.uniform(0, 15), random.uniform(20, 30)] for i in range(sizePopulation)]
+    velocities = [[random.uniform(0, 5), random.uniform(0, 1), random.uniform(0, 20)] for i in range(sizePopulation)]
 
     bestLocals = population
     maxLocalValues = sizePopulation * [0]
@@ -432,10 +500,9 @@ def PSO(maxIter):
     maxGlobalValue = 0
 
     for i in range(maxIter):
-        if i % 100 == 0:
+        if i % 10 == 0:
             print(f'População {i} maxGlobal {maxGlobalValue}')
 
-        
         values = manyPlaysResultsTrain(3, population)
         
         for index, particle in enumerate(population):
@@ -453,6 +520,7 @@ def PSO(maxIter):
         oldPopulation = population
         population = nextPosition(oldPopulation, oldVelocities)
         velocities = nextVelocity(oldPopulation, oldVelocities, bestLocals, bestGlobal)
+        # print((population, velocities))
 
     return bestGlobal, maxGlobalValue
 
@@ -466,7 +534,7 @@ def sum3Particles(a, b, c):
 
 
 def subParticles(a, b):
-    return [a[i] - b[i] for i in range(len(a))]
+    return [abs(a[i] - b[i]) for i in range(len(a))]
 
 
 def multParticle(a, constant):
@@ -500,10 +568,13 @@ def manyPlaysResultsTrain(rounds,solutions):
 
     for round in range(rounds):
         results += [playGame(solutions)]
+        print(results[-1])
 
     npResults = np.asarray(results)
 
     mean_results = np.mean(npResults,axis = 0) - np.std(npResults,axis=0) # axis 0 calcula media da coluna
+    print('values dentro',  end='')
+    print(mean_results)
     return mean_results
 
 
@@ -518,7 +589,13 @@ def manyPlaysResultsTest(rounds,best_solution):
 
 def main():
     global aiPlayer
-    bestState, bestValue = PSO(1000)
+    iterations = 10
+    populationSize = 30
+    
+    pso = PSO(iterations, populationSize)
+    bestState, bestValue = pso.execute()
+
+    # bestState, bestValue = PSO2(10)
 
     aiPlayer = DecisionTreeKeyClassifier(bestState)
     res, value = manyPlaysResultsTest(30, bestState)
