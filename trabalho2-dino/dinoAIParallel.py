@@ -424,6 +424,9 @@ class Particle:
             self.__bestLocalValue = value
             self.__bestLocal = Particle(particle.getPosition()).getPosition()
     
+    def __str__(self):
+        return f'Position: {self.__position} // Velocity: {self.__velocity}\n'
+    
     def getPosition(self):
         return self.__position
 
@@ -476,7 +479,13 @@ class Swarm:
 
     def getBestGlobalValue(self):
         return self.__bestGlobalValue
-    
+
+    def __str__(self):
+        output = ''
+        for particle in self.__population:
+            output += particle.__str__()
+        return output
+
 class PSO:
     def __init__(self, iterations, populationSize):
         self.__swarm = Swarm(populationSize)
@@ -486,6 +495,8 @@ class PSO:
         for i in range(self.__iterations):
             if i % 10 == 0:
                 print(f'Population {i}')
+                print(self.__swarm)
+                
             
             values = manyPlaysResultsTrain(10, self.__swarm.getPopulationToList())
             population = self.__swarm.getPopulation()
@@ -573,7 +584,6 @@ def manyPlaysResultsTrain(rounds,solutions):
 
     for round in range(rounds):
         results += [playGame(solutions)]
-        # print(results[-1])
 
     npResults = np.asarray(results)
 
