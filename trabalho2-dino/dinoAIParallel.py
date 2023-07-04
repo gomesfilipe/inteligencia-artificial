@@ -237,20 +237,12 @@ class DecisionTreeKeyClassifier(KeyClassifier):
     def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType, distanceGround):
         limDistUp = speed * self.alpha # Distância para pular é diretamente proporcional a velocidade do jogo
         limDistDown = speed * self.beta # Distância para abaixar durante o pulo é diretamente proporcional a velocidade do jogo
-        # limDistKeepUp = self.gamma / (speed * speed)
-        # print((nextObDistance, limDistUp))
-        # if nextObDistance <= limDistUp:
-        #     # print('x', end='')
-        #     return "K_UP"
         
         if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
             if self.__shouldUp(obType, obHeight):
                 return "K_UP"
             else:
                 return "K_DOWN"
-        # elif distance < limDistDown and nextObDistance < limDistUp and self.__shouldUp(nextObType, nextObHeight):                                 # Está longe do obstáculo, abaixar
-        #     # print('entrou')
-        #     return "K_UP"
         else:
             return "K_DOWN"
 
@@ -404,15 +396,13 @@ def playGame(solutions):
     return solution_fitness
 
 class Particle:
-    w = 1
-    c1 = 1.2
-    c2 = 1.2
+    c1 = 2
+    c2 = 0.5
+    w = 0.8
 
-    def __init__(self):
-        self.__alpha = random.uniform(20, 30)
-        self.__beta = random.uniform(0, 15)
-        self.__position = [self.__alpha, self.__beta]
-        self.__velocity = [random.uniform(0, 5), random.uniform(0, 1)]
+    def __init__(self, position):
+        self.__position = position
+        self.__velocity = len(position) * [0]
         self.__bestLocal = self.__position
         self.__bestLocalValue = 0
     
@@ -420,17 +410,19 @@ class Particle:
         r1 = random.uniform(0, 1)
         r2 = random.uniform(0, 1)
 
-        for i in range(len(self.__velocity)):
-            self.__velocity[i] = Particle.w * self.__velocity[i] + Particle.c1 * r1 * abs(self.__bestLocal[i] - self.__position[i]) + Particle.c2 * r2 * abs(bestGlobal[i] - self.__position[i])
+        t1 = self.__multParticle(self.__velocity, Particle.w)
+        t2 = self.__multParticle(self.__subParticles(self.__bestLocal, self.__position), Particle.c1 * r1)
+        t3 = self.__multParticle(self.__subParticles(bestGlobal.getPosition(), self.__position), Particle.c2 * r2)
+
+        self.__velocity = self.__sum3Particles(t1, t2, t3)
     
     def updatePosition(self):
-        for i in range(len(self.__position)):
-            self.__position[i] += self.__velocity[i]
+        self.__position = self.__sum2Particles(self.__position, self.__velocity)
 
-    def updateBestLocal(self, position, value):
+    def updateBestLocal(self, particle, value):
         if value > self.__bestLocalValue:
             self.__bestLocalValue = value
-            self.__bestLocal = position
+            self.__bestLocal = Particle(particle.getPosition()).getPosition()
     
     def getPosition(self):
         return self.__position
@@ -440,28 +432,45 @@ class Particle:
     
     def getBestLocalValue(self):
         return self.__bestLocalValue
+    
+    def __sum2Particles(self, a, b):
+        return [a[i] + b[i] for i in range(len(a))]
+
+    def __sum3Particles(self, a, b, c):
+        return [a[i] + b[i] + c[i] for i in range(len(a))]
+
+    def __subParticles(self, a, b):
+        return [abs(a[i] - b[i]) for i in range(len(a))]
+
+    def __multParticle(self, a, constant):
+        return [constant * i for i in a]
+
 
 class Swarm:
     def __init__(self, populationSize):
-        self.__population = [Particle() for x in range(populationSize)]
-        self.__bestGlobal = [0] * populationSize
+        self.__population = [Particle([random.uniform(22, 24), random.uniform(4, 8)]) for x in range(populationSize)]
+        self.__bestGlobal = self.__population[0]
         self.__bestGlobalValue = 0
 
-    def updateBestGlobal(self, position, value):
+    def updateBestGlobal(self, particle, value):
         if value > self.__bestGlobalValue:
             self.__bestGlobalValue = value
-            self.__bestGlobal = position
+            self.__bestGlobal = Particle(particle.getPosition())
+            print(f'New best state! State: {self.__bestGlobal.getPosition()} // Points: {self.__bestGlobalValue}')
 
-    def updateSwarm(self, positions, values):
+    def updateSwarm(self, particles, values):
         for i in range(len(self.__population)):
+            self.__population[i].updateBestLocal(particles[i], values[i])
+            self.updateBestGlobal(particles[i], values[i])
             self.__population[i].updateVelocity(self.__bestGlobal)
             self.__population[i].updatePosition()
-            self.__population[i].updateBestLocal(positions[i], values[i])
-            self.updateBestGlobal(positions[i], values[i])
     
     def getPopulation(self):
-        return [particle.getPosition() for particle in self.__population]
+        return self.__population
     
+    def getPopulationToList(self):
+        return [particle.getPosition() for particle in self.__population]
+
     def getBestGlobal(self):
         return self.__bestGlobal
 
@@ -475,17 +484,14 @@ class PSO:
 
     def execute(self):
         for i in range(self.__iterations):
+            if i % 10 == 0:
+                print(f'Population {i}')
+            
+            values = manyPlaysResultsTrain(10, self.__swarm.getPopulationToList())
             population = self.__swarm.getPopulation()
-            values = manyPlaysResultsTrain(3, population)
-            print('values fora: ', end='')
-            print(values)
-            # print(population)
-            print()
             self.__swarm.updateSwarm(population, values)
-            # print(self.__swarm.getPopulation())
-            # print(self.__swarm.getBestGlobalValue())
         
-        return self.__swarm.getBestGlobal(), self.__swarm.getBestGlobalValue()
+        return self.__swarm.getBestGlobal().getPosition(), self.__swarm.getBestGlobalValue()
 
 
 def PSO2(maxIter):
@@ -520,7 +526,6 @@ def PSO2(maxIter):
         oldPopulation = population
         population = nextPosition(oldPopulation, oldVelocities)
         velocities = nextVelocity(oldPopulation, oldVelocities, bestLocals, bestGlobal)
-        # print((population, velocities))
 
     return bestGlobal, maxGlobalValue
 
@@ -568,13 +573,11 @@ def manyPlaysResultsTrain(rounds,solutions):
 
     for round in range(rounds):
         results += [playGame(solutions)]
-        print(results[-1])
+        # print(results[-1])
 
     npResults = np.asarray(results)
 
     mean_results = np.mean(npResults,axis = 0) - np.std(npResults,axis=0) # axis 0 calcula media da coluna
-    print('values dentro',  end='')
-    print(mean_results)
     return mean_results
 
 
@@ -589,26 +592,22 @@ def manyPlaysResultsTest(rounds,best_solution):
 
 def main():
     global aiPlayer
-    iterations = 10
-    populationSize = 30
+    iterations = 100
+    populationSize = 50
     
     pso = PSO(iterations, populationSize)
     bestState, bestValue = pso.execute()
+    # bestState, bestValue = PSO2(100)
 
-    # bestState, bestValue = PSO2(10)
-
+    print('------------------')
     aiPlayer = DecisionTreeKeyClassifier(bestState)
     res, value = manyPlaysResultsTest(30, bestState)
     npRes = np.asarray(res)
-    print('results:')
-    print(res)
     
-    print('\nbestState:')
-    print(bestState)
-
-    print('\nmean: {:.2f}'.format(npRes.mean()))
+    print(f'results: {res}')
+    print(f'bestState: {bestState}')
+    print('mean: {:.2f}'.format(npRes.mean()))
     print('std: {:.2f}'.format(npRes.std()))
     print('value: {:.2f}'.format(value))
-
 
 main()
