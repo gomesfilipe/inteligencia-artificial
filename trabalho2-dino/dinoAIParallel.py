@@ -1,15 +1,18 @@
 import pygame
 import os
 import random
-import time
 from sys import exit
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import ttest_rel, wilcoxon
 
 pygame.init()
 
 # Valid values: HUMAN_MODE or AI_MODE
 GAME_MODE = "AI_MODE"
 RENDER_GAME = False
-
 # Global Constants
 SCREEN_HEIGHT = 600
 SCREEN_WIDTH = 1100
@@ -36,7 +39,6 @@ BIRD = [pygame.image.load(os.path.join("Assets/Bird", "Bird1.png")),
 CLOUD = pygame.image.load(os.path.join("Assets/Other", "Cloud.png"))
 
 BG = pygame.image.load(os.path.join("Assets/Other", "Track.png"))
-
 
 class Dinosaur:
     X_POS = 90
@@ -127,7 +129,6 @@ class Dinosaur:
     def getXY(self):
         return (self.dino_rect.x, self.dino_rect.y)
 
-
 class Cloud:
     def __init__(self):
         self.x = SCREEN_WIDTH + random.randint(800, 1000)
@@ -143,7 +144,6 @@ class Cloud:
 
     def draw(self, SCREEN):
         SCREEN.blit(self.image, (self.x, self.y))
-
 
 class Obstacle():
     def __init__(self, image, type):
@@ -171,20 +171,17 @@ class Obstacle():
     def getType(self):
         return (self.type)
 
-
 class SmallCactus(Obstacle):
     def __init__(self, image):
         self.type = random.randint(0, 2)
         super().__init__(image, self.type)
         self.rect.y = 345
 
-
 class LargeCactus(Obstacle):
     def __init__(self, image):
         self.type = random.randint(0, 2)
         super().__init__(image, self.type)
         self.rect.y = 325
-
 
 class Bird(Obstacle):
     def __init__(self, image):
@@ -206,7 +203,6 @@ class Bird(Obstacle):
         SCREEN.blit(self.image[self.index // 10], self.rect)
         self.index += 1
 
-
 class KeyClassifier:
     def __init__(self, state):
         pass
@@ -217,12 +213,10 @@ class KeyClassifier:
     def updateState(self, state):
         pass
 
-
 class DecisionTreeKeyClassifier(KeyClassifier):
     def __init__(self, state):
         self.alpha = state[0]
         self.beta = state[1]
-        # self.gamma = state[2]
 
     def __isGroundBird(self, obType, obHeight):
         if isinstance(obType, Bird) and obHeight < 40:
@@ -237,7 +231,7 @@ class DecisionTreeKeyClassifier(KeyClassifier):
     def keySelector(self, distance, obHeight, speed, obType, nextObDistance, nextObHeight,nextObType, distanceGround):
         limDistUp = speed * self.alpha # Distância para pular é diretamente proporcional a velocidade do jogo
         limDistDown = speed * self.beta # Distância para abaixar durante o pulo é diretamente proporcional a velocidade do jogo
-        
+
         if distance <= limDistUp and distance >= limDistDown: # Perto de obstáculo
             if self.__shouldUp(obType, obHeight):
                 return "K_UP"
@@ -245,11 +239,9 @@ class DecisionTreeKeyClassifier(KeyClassifier):
                 return "K_DOWN"
         else:
             return "K_DOWN"
-
-
+            
     def updateState(self, state):
         self.state = state
-
 
 def playerKeySelector():
     userInputArray = pygame.key.get_pressed()
@@ -260,7 +252,6 @@ def playerKeySelector():
         return "K_DOWN"
     else:
         return "K_NO"
-
 
 def playGame(solutions):
     global game_speed, x_pos_bg, y_pos_bg, points, obstacles
@@ -396,9 +387,9 @@ def playGame(solutions):
     return solution_fitness
 
 class Particle:
-    c1 = 2
-    c2 = 0.5
-    w = 0.8
+    w = 0.08
+    c1 = 0.2
+    c2 = 0.05
 
     def __init__(self, position):
         self.__position = position
@@ -415,9 +406,11 @@ class Particle:
         t3 = self.__multParticle(self.__subParticles(bestGlobal.getPosition(), self.__position), Particle.c2 * r2)
 
         self.__velocity = self.__sum3Particles(t1, t2, t3)
+        self.__velocity = [random.uniform(0, 10) if x > 50 else x for x in self.__velocity]
     
     def updatePosition(self):
         self.__position = self.__sum2Particles(self.__position, self.__velocity)
+        self.__position = [random.uniform(0, 30) if x > 50 else x for x in self.__position]
 
     def updateBestLocal(self, particle, value):
         if value > self.__bestLocalValue:
@@ -425,7 +418,7 @@ class Particle:
             self.__bestLocal = Particle(particle.getPosition()).getPosition()
     
     def __str__(self):
-        return f'Position: {self.__position} // Velocity: {self.__velocity}\n'
+        return f'Position: {[float("%.3f" % x) for x in self.__position]} // Velocity: {[float("%.3f" % x) for x in self.__velocity]}\n'
     
     def getPosition(self):
         return self.__position
@@ -448,10 +441,10 @@ class Particle:
     def __multParticle(self, a, constant):
         return [constant * i for i in a]
 
-
 class Swarm:
     def __init__(self, populationSize):
-        self.__population = [Particle([random.uniform(22, 24), random.uniform(4, 8)]) for x in range(populationSize)]
+        # self.__population = [Particle([random.uniform(22, 24), random.uniform(4, 8)]) for x in range(populationSize)]
+        self.__population = [Particle([random.uniform(0, 1), random.uniform(0, 1)]) for x in range(populationSize)]
         self.__bestGlobal = self.__population[0]
         self.__bestGlobalValue = 0
 
@@ -487,97 +480,25 @@ class Swarm:
         return output
 
 class PSO:
-    def __init__(self, iterations, populationSize):
+    def __init__(self, iterations, populationSize, file = None):
         self.__swarm = Swarm(populationSize)
         self.__iterations = iterations
+        self.__file = file
 
     def execute(self):
         for i in range(self.__iterations):
-            if i % 10 == 0:
+            if i % 100 == 0:
                 print(f'Population {i}')
-                print(self.__swarm)
-                
             
-            values = manyPlaysResultsTrain(10, self.__swarm.getPopulationToList())
+            values = manyPlaysResultsTrain(5, self.__swarm.getPopulationToList())
+            
+            if self.__file != None:
+                self.__file.write(f'{i + 1},{np.mean(values)},{max(values)}\n')
+
             population = self.__swarm.getPopulation()
             self.__swarm.updateSwarm(population, values)
         
         return self.__swarm.getBestGlobal().getPosition(), self.__swarm.getBestGlobalValue()
-
-
-def PSO2(maxIter):
-    sizePopulation = 50 # Tamanho da população 10 vezes maior que o número de dimensões do classificador 
-    population = [[random.uniform(20, 30), random.uniform(0, 15), random.uniform(20, 30)] for i in range(sizePopulation)]
-    velocities = [[random.uniform(0, 5), random.uniform(0, 1), random.uniform(0, 20)] for i in range(sizePopulation)]
-
-    bestLocals = population
-    maxLocalValues = sizePopulation * [0]
-   
-    bestGlobal = population[0]
-    maxGlobalValue = 0
-
-    for i in range(maxIter):
-        if i % 10 == 0:
-            print(f'População {i} maxGlobal {maxGlobalValue}')
-
-        values = manyPlaysResultsTrain(3, population)
-        
-        for index, particle in enumerate(population):
-            if values[index] > maxLocalValues[index]:
-                bestLocals[index] = particle
-                maxLocalValues[index] = values[index]
-
-            # Checando se é a melhor posição encontrada por todo o enxame de partículas
-            if values[index] > maxGlobalValue:
-                bestGlobal = particle
-                maxGlobalValue = values[index]
-
-        # Atualizando posições e velocidades das partículas
-        oldVelocities = velocities
-        oldPopulation = population
-        population = nextPosition(oldPopulation, oldVelocities)
-        velocities = nextVelocity(oldPopulation, oldVelocities, bestLocals, bestGlobal)
-
-    return bestGlobal, maxGlobalValue
-
-
-def sum2Particles(a, b):
-    return [a[i] + b[i] for i in range(len(a))]
-
-
-def sum3Particles(a, b, c):
-    return [a[i] + b[i] + c[i] for i in range(len(a))]
-
-
-def subParticles(a, b):
-    return [abs(a[i] - b[i]) for i in range(len(a))]
-
-
-def multParticle(a, constant):
-    return [constant * i for i in a]
-
-
-def nextPosition(x, v):
-    return [sum2Particles(p1, p2) for (p1, p2) in zip(x, v)]
-
-
-def nextVelocity(x, v, bestLocals, bestGlobal):
-    c1 = 2
-    c2 = 0.5
-    w  = 0.8
-    r1 = random.uniform(0, 1)
-    r2 = random.uniform(0, 1)
-    
-    t1 = [multParticle(p, w) for p in v]
-    t2 = [multParticle(subParticles(p1, p2), c1 * r1) for (p1, p2) in zip(bestLocals, x)]
-    t3 = [multParticle(subParticles(p, bestGlobal), c2 * r2) for p in x]
-
-    return [sum3Particles(p1, p2, p3) for (p1, p2, p3) in zip(t1, t2, t3)]
-
-
-from scipy import stats
-import numpy as np
-
 
 def manyPlaysResultsTrain(rounds,solutions):
     results = []
@@ -590,7 +511,6 @@ def manyPlaysResultsTrain(rounds,solutions):
     mean_results = np.mean(npResults,axis = 0) - np.std(npResults,axis=0) # axis 0 calcula media da coluna
     return mean_results
 
-
 def manyPlaysResultsTest(rounds,best_solution):
     results = []
     for round in range(rounds):
@@ -599,25 +519,60 @@ def manyPlaysResultsTest(rounds,best_solution):
     npResults = np.asarray(results)
     return (results, npResults.mean() - npResults.std())
 
+def runsDataFrame(myResult, profResult):
+  my = ['Student'] + myResult + [np.mean(myResult), np.std(myResult)]
+  prof = ['Teacher'] + profResult + [np.mean(profResult), np.std(profResult)]
+
+  columns = ['Person'] + [f'Run {i + 1}' for i in range(len(myResult))] + ['mean_runs', 'std_runs']
+
+  return pd.DataFrame(data = [my, prof], columns = columns).transpose()
+
+def boxplotDinos(myResult, profResult):
+  sns.boxplot(data = [myResult, profResult]).set(xlabel='Aluno / Professor', ylabel='Pontuação')
+  plt.savefig("boxplot.svg")
+  plt.show()
 
 def main():
     global aiPlayer
-    iterations = 100
-    populationSize = 50
     
-    pso = PSO(iterations, populationSize)
-    bestState, bestValue = pso.execute()
-    # bestState, bestValue = PSO2(100)
+    # # Execução do PSO.
+    # iterations = 10000
+    # populationSize = 50
 
-    print('------------------')
+    # file = open('data.csv', 'w')
+
+    # pso = PSO(iterations, populationSize, file)
+    # bestState, bestValue = pso.execute()
+
+    # file.close()
+
+    # Melhor solução encontrada pelo PSO.
+    bestState = [23.89132954117281, 6.298481701945017]
+
     aiPlayer = DecisionTreeKeyClassifier(bestState)
-    res, value = manyPlaysResultsTest(30, bestState)
-    npRes = np.asarray(res)
+    myResult, value = manyPlaysResultsTest(30, bestState)
     
-    print(f'results: {res}')
-    print(f'bestState: {bestState}')
-    print('mean: {:.2f}'.format(npRes.mean()))
-    print('std: {:.2f}'.format(npRes.std()))
-    print('value: {:.2f}'.format(value))
+    profResult = [
+        1214.0, 759.5, 1164.25, 977.25, 1201.0, 930.0, 1427.75, 799.5, 1006.25, 783.5,
+        728.5, 419.25, 1389.5, 730.0, 1306.25, 675.5, 1359.5, 1000.25, 1284.5, 1350.0,
+        751.0, 1418.75, 1276.5, 1645.75, 860.0, 745.5, 1426.25, 783.5, 1149.75, 1482.25
+    ]
+
+    # Informações das corridas do meu dino e o baseline.
+    df = runsDataFrame(myResult, profResult)
+    print('----------------------')
+    print(df)
+    print('----------------------\n')
+
+    # Testes de hipótese
+    s, p = ttest_rel(myResult, profResult)
+    print(f'Teste T Pareado: {p}')
+
+    s, p = wilcoxon(myResult, profResult)
+    print(f'Teste de Wilcoxon: {p}')
+
+    # Boxplot da distribuição das pontuações das 30 corridas.
+    # Gera um arquivo SVG com a imagem do boxplot e também a mostra no terminal.
+    boxplotDinos(myResult, profResult)
 
 main()
